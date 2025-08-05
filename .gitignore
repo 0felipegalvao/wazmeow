@@ -39,6 +39,8 @@ CRUSH.md
 # Build artifacts
 bin/
 server
+# Ignorar banco de dados local
+data/wazmeow.db
 wazmeow
 
 # Test data
