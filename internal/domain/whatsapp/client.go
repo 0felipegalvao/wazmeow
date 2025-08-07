@@ -2,165 +2,132 @@ package whatsapp
 
 import (
 	"context"
-	"time"
-
-	"wazmeow/internal/domain/session"
+	sessionDomain "wazmeow/internal/domain/session"
 )
+
+// ConnectionStatus represents the WhatsApp connection status
+type ConnectionStatus string
+
+const (
+	ConnectionStatusDisconnected ConnectionStatus = "disconnected"
+	ConnectionStatusConnecting   ConnectionStatus = "connecting"
+	ConnectionStatusConnected    ConnectionStatus = "connected"
+	ConnectionStatusFailed       ConnectionStatus = "failed"
+	ConnectionStatusError        ConnectionStatus = "error"
+)
+
+// QRCodeEvent represents a QR code generation event
+type QRCodeEvent struct {
+	SessionID sessionDomain.SessionID
+	Code      string
+	Timeout   int // seconds
+}
+
+// AuthenticationEvent represents an authentication event
+type AuthenticationEvent struct {
+	SessionID sessionDomain.SessionID
+	JID       string
+	Success   bool
+	Error     string
+}
+
+// ConnectionEvent represents a connection status change event
+type ConnectionEvent struct {
+	SessionID sessionDomain.SessionID
+	Status    ConnectionStatus
+	Error     string
+}
 
 // Client defines the interface for WhatsApp client operations
 type Client interface {
-	// Connection management
-	Connect(ctx context.Context) (*ConnectionResult, error)
-	Disconnect(ctx context.Context) error
-	IsConnected() bool
-	GetConnectionStatus() ConnectionStatus
+	// Connect establishes a connection for the given session
+	Connect(ctx context.Context, sessionID sessionDomain.SessionID) error
 
-	// Authentication
-	GenerateQR(ctx context.Context) (string, error)
-	PairPhone(ctx context.Context, phoneNumber string) error
-	IsAuthenticated() bool
+	// Disconnect closes the connection for the given session
+	Disconnect(ctx context.Context, sessionID sessionDomain.SessionID) error
 
-	// Session information
-	GetSessionID() session.SessionID
-	GetJID() string
-	GetDeviceInfo() *DeviceInfo
+	// Logout logs out and clears authentication for the session
+	Logout(ctx context.Context, sessionID sessionDomain.SessionID) error
 
-	// Messaging
-	SendMessage(ctx context.Context, to, message string) error
-	SendImage(ctx context.Context, to, imagePath, caption string) error
-	SendDocument(ctx context.Context, to, documentPath, filename string) error
+	// GetQRCode generates a QR code for authentication
+	GetQRCode(ctx context.Context, sessionID sessionDomain.SessionID) (string, error)
 
-	// Event handling
-	SetEventHandler(handler EventHandler)
-	RemoveEventHandler()
+	// PairPhone pairs a phone number for authentication
+	PairPhone(ctx context.Context, sessionID sessionDomain.SessionID, phone string) (string, error)
 
-	// Lifecycle
-	Close() error
-}
+	// IsConnected checks if the session is connected
+	IsConnected(ctx context.Context, sessionID sessionDomain.SessionID) bool
 
-// Manager defines the interface for managing multiple WhatsApp clients
-type Manager interface {
-	// Client management
-	CreateClient(sessionID session.SessionID) (Client, error)
-	GetClient(sessionID session.SessionID) (Client, error)
-	RemoveClient(sessionID session.SessionID) error
-	ListClients() []session.SessionID
+	// IsAuthenticated checks if the session is authenticated
+	IsAuthenticated(ctx context.Context, sessionID sessionDomain.SessionID) bool
 
-	// Lifecycle
-	Start(ctx context.Context) error
-	Stop() error
-	IsRunning() bool
+	// GetJID returns the WhatsApp JID for the session
+	GetJID(ctx context.Context, sessionID sessionDomain.SessionID) (string, error)
 
-	// Health check
-	HealthCheck() error
-}
+	// SetProxy configures proxy for the session
+	SetProxy(ctx context.Context, sessionID sessionDomain.SessionID, proxyURL string) error
 
-// ConnectionResult represents the result of a connection attempt
-type ConnectionResult struct {
-	JID       string
-	QRCode    string
-	Status    ConnectionStatus
-	Error     error
-	Timestamp time.Time
-}
-
-// ConnectionStatus represents the connection status
-type ConnectionStatus int
-
-const (
-	StatusDisconnected ConnectionStatus = iota
-	StatusConnecting
-	StatusConnected
-	StatusAuthenticating
-	StatusAuthenticated
-	StatusError
-)
-
-// String returns the string representation of ConnectionStatus
-func (s ConnectionStatus) String() string {
-	switch s {
-	case StatusDisconnected:
-		return "disconnected"
-	case StatusConnecting:
-		return "connecting"
-	case StatusConnected:
-		return "connected"
-	case StatusAuthenticating:
-		return "authenticating"
-	case StatusAuthenticated:
-		return "authenticated"
-	case StatusError:
-		return "error"
-	default:
-		return "unknown"
-	}
-}
-
-// DeviceInfo represents device information
-type DeviceInfo struct {
-	Platform     string
-	AppVersion   string
-	DeviceModel  string
-	OSVersion    string
-	Manufacturer string
+	// GetConnectionStatus returns the current connection status
+	GetConnectionStatus(ctx context.Context, sessionID sessionDomain.SessionID) ConnectionStatus
 }
 
 // EventHandler defines the interface for handling WhatsApp events
 type EventHandler interface {
-	OnConnected(sessionID session.SessionID, jid string)
-	OnDisconnected(sessionID session.SessionID, reason string)
-	OnQRCode(sessionID session.SessionID, qrCode string)
-	OnAuthenticated(sessionID session.SessionID, jid string)
-	OnAuthenticationFailed(sessionID session.SessionID, reason string)
-	OnMessage(sessionID session.SessionID, message *Message)
-	OnError(sessionID session.SessionID, err error)
+	// OnQRCode is called when a QR code is generated
+	OnQRCode(event QRCodeEvent)
+
+	// OnAuthentication is called when authentication status changes
+	OnAuthentication(event AuthenticationEvent)
+
+	// OnConnection is called when connection status changes
+	OnConnection(event ConnectionEvent)
+
+	// OnMessage is called when a message is received
+	OnMessage(event MessageEvent)
+
+	// OnPresence is called when presence information is received
+	OnPresence(event PresenceEvent)
 }
 
-// Message represents a WhatsApp message
-type Message struct {
-	ID        string
-	From      string
-	To        string
-	Body      string
-	Type      MessageType
-	Timestamp time.Time
-	IsFromMe  bool
+// ClientManager manages multiple WhatsApp clients
+type ClientManager interface {
+	// CreateClient creates a new client for the session
+	CreateClient(ctx context.Context, sessionID sessionDomain.SessionID) (Client, error)
+
+	// GetClient retrieves an existing client for the session
+	GetClient(ctx context.Context, sessionID sessionDomain.SessionID) (Client, error)
+
+	// RemoveClient removes and cleans up a client for the session
+	RemoveClient(ctx context.Context, sessionID sessionDomain.SessionID) error
+
+	// GetAllClients returns all active clients
+	GetAllClients(ctx context.Context) map[sessionDomain.SessionID]Client
+
+	// SetEventHandler sets the event handler for all clients
+	SetEventHandler(handler EventHandler)
+
+	// ConnectAll connects all sessions marked as active
+	ConnectAll(ctx context.Context) error
+
+	// DisconnectAll disconnects all active sessions
+	DisconnectAll(ctx context.Context) error
 }
 
-// MessageType represents the type of message
-type MessageType int
+// ClientConfig represents configuration for WhatsApp clients
+type ClientConfig struct {
+	Debug      bool
+	OSName     string
+	ProxyURL   string
+	Timeout    int // seconds
+	RetryCount int
+	LogLevel   string
+}
 
-const (
-	MessageTypeText MessageType = iota
-	MessageTypeImage
-	MessageTypeDocument
-	MessageTypeAudio
-	MessageTypeVideo
-	MessageTypeSticker
-	MessageTypeLocation
-	MessageTypeContact
-)
+// Factory creates WhatsApp clients with the given configuration
+type Factory interface {
+	// CreateClientManager creates a new client manager
+	CreateClientManager(config ClientConfig) ClientManager
 
-// String returns the string representation of MessageType
-func (t MessageType) String() string {
-	switch t {
-	case MessageTypeText:
-		return "text"
-	case MessageTypeImage:
-		return "image"
-	case MessageTypeDocument:
-		return "document"
-	case MessageTypeAudio:
-		return "audio"
-	case MessageTypeVideo:
-		return "video"
-	case MessageTypeSticker:
-		return "sticker"
-	case MessageTypeLocation:
-		return "location"
-	case MessageTypeContact:
-		return "contact"
-	default:
-		return "unknown"
-	}
+	// CreateClient creates a single client
+	CreateClient(sessionID sessionDomain.SessionID, config ClientConfig) (Client, error)
 }

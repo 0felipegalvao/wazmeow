@@ -1,10 +1,10 @@
-package session
+package domain
 
 import "context"
 
-// Repository defines the interface for session persistence operations
+// Repository defines the interface for session persistence
 type Repository interface {
-	// Create stores a new session in the repository
+	// Create stores a new session
 	Create(ctx context.Context, session *Session) error
 
 	// GetByID retrieves a session by its ID
@@ -13,53 +13,42 @@ type Repository interface {
 	// GetByName retrieves a session by its name
 	GetByName(ctx context.Context, name string) (*Session, error)
 
-	// List retrieves sessions with pagination
-	List(ctx context.Context, limit, offset int) ([]*Session, int, error)
-
 	// Update updates an existing session
 	Update(ctx context.Context, session *Session) error
 
-	// Delete removes a session from the repository
+	// Delete removes a session
 	Delete(ctx context.Context, id SessionID) error
 
-	// UpdateStatus updates only the status of a session
+	// List retrieves all sessions with optional filters
+	List(ctx context.Context, filters map[string]interface{}) ([]*Session, error)
+
+	// ExistsByID checks if a session exists by ID
+	ExistsByID(ctx context.Context, id SessionID) (bool, error)
+
+	// ExistsByName checks if a session exists by name
+	ExistsByName(ctx context.Context, name string) (bool, error)
+
+	// GetActiveCount returns the count of active sessions
+	GetActiveCount(ctx context.Context) (int64, error)
+
+	// GetByStatus retrieves sessions by status
+	GetByStatus(ctx context.Context, status Status) ([]*Session, error)
+
+	// UpdateStatus updates the status of a session
 	UpdateStatus(ctx context.Context, id SessionID, status Status) error
 
-	// GetActiveCount returns the number of active sessions
-	GetActiveCount(ctx context.Context) (int, error)
+	// SetWAJID sets the WhatsApp JID for a session
+	SetWAJID(ctx context.Context, id SessionID, wajid string) error
 
-	// GetByStatus retrieves sessions by their status
-	GetByStatus(ctx context.Context, status Status, limit, offset int) ([]*Session, int, error)
+	// SetQRCode sets the QR code for a session
+	SetQRCode(ctx context.Context, id SessionID, qrCode string) error
 
-	// Exists checks if a session with the given ID exists
-	Exists(ctx context.Context, id SessionID) (bool, error)
+	// ClearQRCode clears the QR code for a session
+	ClearQRCode(ctx context.Context, id SessionID) error
 
-	// ExistsByName checks if a session with the given name exists
-	ExistsByName(ctx context.Context, name string) (bool, error)
-}
+	// GetConnectedSessions retrieves all connected sessions
+	GetConnectedSessions(ctx context.Context) ([]*Session, error)
 
-// ListFilter represents filters for listing sessions
-type ListFilter struct {
-	Status   *Status
-	IsActive *bool
-	Search   string
-}
-
-// ListOptions represents options for listing sessions
-type ListOptions struct {
-	Limit  int
-	Offset int
-	Sort   string
-	Order  string
-}
-
-// RepositoryWithFilters extends Repository with advanced filtering capabilities
-type RepositoryWithFilters interface {
-	Repository
-
-	// ListWithFilter retrieves sessions with advanced filtering
-	ListWithFilter(ctx context.Context, filter ListFilter, options ListOptions) ([]*Session, int, error)
-
-	// CountWithFilter counts sessions matching the filter
-	CountWithFilter(ctx context.Context, filter ListFilter) (int, error)
+	// BulkUpdateStatus updates status for multiple sessions
+	BulkUpdateStatus(ctx context.Context, ids []SessionID, status Status) error
 }

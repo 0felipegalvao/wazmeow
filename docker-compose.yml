@@ -1,46 +1,37 @@
-version: '3.8'
-
 services:
-  # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
     container_name: wazmeow-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: wazmeow
-      POSTGRES_USER: wazmeow
-      POSTGRES_PASSWORD: wazmeow123
-      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     ports:
-      - "5433:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    networks:
-      - wazmeow-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U wazmeow -d wazmeow"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d wazmeow"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: wazmeow-redis
     restart: unless-stopped
     ports:
-      - "6380:6379"
+      - "6379:6379"
     volumes:
       - redis_data:/data
-    networks:
-      - wazmeow-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # DBGate - Database Administration Tool
   dbgate:
     image: dbgate/dbgate:latest
     container_name: wazmeow-dbgate
@@ -51,25 +42,16 @@ services:
       CONNECTIONS: con1
       LABEL_con1: WazMeow PostgreSQL
       SERVER_con1: postgres
-      USER_con1: wazmeow
-      PASSWORD_con1: wazmeow123
+      USER_con1: postgres
+      PASSWORD_con1: password
       PORT_con1: 5432
       ENGINE_con1: postgres@dbgate-plugin-postgres
       DATABASE_con1: wazmeow
-    networks:
-      - wazmeow-network
     depends_on:
-      postgres:
-        condition: service_healthy
-
-
+      - postgres
 
 volumes:
   postgres_data:
     driver: local
   redis_data:
     driver: local
-
-networks:
-  wazmeow-network:
-    driver: bridge

@@ -2,84 +2,73 @@ package database
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
+	"time"
 
-	"github.com/uptrace/bun"
+	"wazmeow/internal/app/config"
 
-	"wazmeow/internal/infra/config"
-	"wazmeow/internal/infra/database/drivers"
-	"wazmeow/pkg/logger"
+	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq"
+	"github.com/rs/zerolog/log"
 )
 
-// Connection interface defines the database connection contract
-type Connection interface {
-	GetDB() *bun.DB
-	Close() error
-	Health() error
-	Stats() sql.DBStats
+// Database wraps the database connection and provides additional functionality
+type Database struct {
+	*sqlx.DB
 }
 
-// DriverConnection interface for driver implementations
-type DriverConnection interface {
-	GetDB() *bun.DB
-	Close() error
-	Health() error
-	Stats() sql.DBStats
-}
+// New creates a new database connection
+func New(cfg config.DatabaseConfig) (*Database, error) {
+	dsn := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Name, cfg.SSLMode,
+	)
 
-// Migrator interface defines database migration operations
-type Migrator interface {
-	Migrate(ctx context.Context) error
-	Reset(ctx context.Context) error
-	Drop(ctx context.Context) error
-}
-
-// DatabaseType represents the type of database
-type DatabaseType string
-
-const (
-	SQLite      DatabaseType = "sqlite"
-	SQLite3     DatabaseType = "sqlite3"
-	PostgreSQL  DatabaseType = "postgres"
-	PostgreSQL2 DatabaseType = "postgresql"
-)
-
-// ConnectionFactory creates database connections based on configuration
-type ConnectionFactory struct {
-	logger logger.Logger
-}
-
-// NewConnectionFactory creates a new connection factory
-func NewConnectionFactory(log logger.Logger) *ConnectionFactory {
-	return &ConnectionFactory{
-		logger: log,
-	}
-}
-
-// CreateConnection creates a database connection based on the driver type
-func (f *ConnectionFactory) CreateConnection(cfg *config.DatabaseConfig) (Connection, error) {
-	dbType := DatabaseType(cfg.Driver)
-
-	if f.logger != nil {
-		f.logger.InfoWithFields("creating database connection", logger.Fields{
-			"driver": cfg.Driver,
-			"type":   string(dbType),
-		})
+	db, err := sqlx.Connect("postgres", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	switch dbType {
-	case SQLite, SQLite3:
-		return drivers.NewSQLiteConnection(cfg, f.logger)
-	case PostgreSQL, PostgreSQL2:
-		return drivers.NewPostgreSQLConnection(cfg, f.logger)
-	default:
-		return nil, fmt.Errorf("unsupported database driver: %s", cfg.Driver)
+	// Configure connection pool
+	db.SetMaxOpenConns(cfg.MaxOpenConns)
+	db.SetMaxIdleConns(cfg.MaxIdleConns)
+	db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+	db.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
+
+	// Test connection
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := db.PingContext(ctx); err != nil {
+		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
+
+	database := &Database{
+		DB: db,
+	}
+
+	log.Info().
+		Str("host", cfg.Host).
+		Int("port", cfg.Port).
+		Str("database", cfg.Name).
+		Msg("Database connected successfully")
+
+	return database, nil
 }
 
-// New creates a new database connection using the factory pattern
-func New(cfg *config.DatabaseConfig, log logger.Logger) (Connection, error) {
-	factory := NewConnectionFactory(log)
-	return factory.CreateConnection(cfg)
+// Migrate runs all pending database migrations
+func (d *Database) Migrate(ctx context.Context) error {
+	// TODO: Implement migrations
+	return nil
+}
+
+// Close closes the database connection
+func (d *Database) Close() error {
+	log.Info().Msg("Closing database connection")
+	return d.DB.Close()
+}
+
+// Health checks the database health
+func (d *Database) Health(ctx context.Context) error {
+	return d.PingContext(ctx)
 }
