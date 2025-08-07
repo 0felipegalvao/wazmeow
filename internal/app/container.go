@@ -6,9 +6,9 @@ import (
 
 	"wazmeow/internal/app/config"
 	"wazmeow/internal/domain"
-	"wazmeow/internal/infra/database"
-	"wazmeow/internal/infra/database/repository"
-wazmeow/internal/infra/whatsapp
+	"wazmeow/internal/services"
+	"wazmeow/internal/storage"
+	"wazmeow/internal/storage/repository"
 
 	"github.com/rs/zerolog/log"
 	waLog "go.mau.fi/whatsmeow/util/log"
@@ -17,18 +17,17 @@ wazmeow/internal/infra/whatsapp
 // Container holds all application dependencies
 type Container struct {
 	config *config.Config
-	db     *database.Database
+	db     *storage.Database
 
 	// WhatsApp
-	whatsappStoreManager  *whatsapp.StoreManager
-	whatsappClientManager *whatsapp.ClientManager
+	whatsappStoreManager *services.WhatsAppStoreManager
+	multiSessionManager  *services.MultiSessionManager
 
 	// Repositories
 	sessionRepo domain.Repository
 
 	// Use Cases
-	createSessionUC  *domain.CreateSessionUseCase
-	connectSessionUC *domain.ConnectSessionUseCase
+	createSessionUC *services.CreateSessionUseCase
 }
 
 // NewContainer creates a new dependency injection container
@@ -49,6 +48,10 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		return nil, fmt.Errorf("failed to initialize repositories: %w", err)
 	}
 
+	if err := container.initializeMultiSessionManager(); err != nil {
+		return nil, fmt.Errorf("failed to initialize multi-session manager: %w", err)
+	}
+
 	if err := container.initializeUseCases(); err != nil {
 		return nil, fmt.Errorf("failed to initialize use cases: %w", err)
 	}
@@ -59,7 +62,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 
 // initializeDatabase sets up the database connection and runs migrations
 func (c *Container) initializeDatabase() error {
-	db, err := database.New(c.config.Database)
+	db, err := storage.New(c.config.Database)
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
@@ -81,16 +84,12 @@ func (c *Container) initializeWhatsApp() error {
 	waLogger := waLog.Stdout("WhatsApp", "INFO", true)
 
 	// Create WhatsApp store manager
-	storeManager, err := whatsapp.NewStoreManager(c.db.DB.DB, waLogger)
+	storeManager, err := services.NewWhatsAppStoreManager(c.db.DB.DB, waLogger)
 	if err != nil {
 		return fmt.Errorf("failed to create WhatsApp store manager: %w", err)
 	}
 
-	// Create WhatsApp client manager
-	clientManager := whatsapp.NewClientManager(storeManager, waLogger)
-
 	c.whatsappStoreManager = storeManager
-	c.whatsappClientManager = clientManager
 
 	log.Info().Msg("WhatsApp initialized successfully")
 	return nil
@@ -104,10 +103,19 @@ func (c *Container) initializeRepositories() error {
 	return nil
 }
 
+// initializeMultiSessionManager sets up the multi-session manager
+func (c *Container) initializeMultiSessionManager() error {
+	// Create multi-session manager
+	multiSessionManager := services.NewMultiSessionManager(c.whatsappStoreManager, c.sessionRepo)
+	c.multiSessionManager = multiSessionManager
+
+	log.Info().Msg("Multi-session manager initialized successfully")
+	return nil
+}
+
 // initializeUseCases sets up all use cases
 func (c *Container) initializeUseCases() error {
-	c.createSessionUC = domain.NewCreateSessionUseCase(c.sessionRepo)
-	c.connectSessionUC = domain.NewConnectSessionUseCase(c.sessionRepo, c.whatsappClientManager)
+	c.createSessionUC = services.NewCreateSessionUseCase(c.sessionRepo)
 
 	log.Info().Msg("Use cases initialized successfully")
 	return nil
@@ -132,7 +140,7 @@ func (c *Container) Config() *config.Config {
 	return c.config
 }
 
-func (c *Container) Database() *database.Database {
+func (c *Container) Database() *storage.Database {
 	return c.db
 }
 
@@ -140,10 +148,14 @@ func (c *Container) SessionRepository() domain.Repository {
 	return c.sessionRepo
 }
 
-func (c *Container) CreateSessionUseCase() *domain.CreateSessionUseCase {
+func (c *Container) CreateSessionUseCase() *services.CreateSessionUseCase {
 	return c.createSessionUC
 }
 
-func (c *Container) ConnectSessionUseCase() *domain.ConnectSessionUseCase {
-	return c.connectSessionUC
+func (c *Container) MultiSessionManager() *services.MultiSessionManager {
+	return c.multiSessionManager
 }
+
+// func (c *Container) ConnectSessionUseCase() *sessionuc.ConnectSessionUseCase {
+// 	return c.connectSessionUC
+// }

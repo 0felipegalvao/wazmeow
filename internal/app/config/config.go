@@ -23,14 +23,14 @@ type Config struct {
 
 // ServerConfig holds HTTP server configuration
 type ServerConfig struct {
-	Host          string        `json:"host"`
-	Port          int           `json:"port"`
-	ReadTimeout   time.Duration `json:"read_timeout"`
-	WriteTimeout  time.Duration `json:"write_timeout"`
-	IdleTimeout   time.Duration `json:"idle_timeout"`
-	APIKey        string        `json:"api_key,omitempty"`
-	EnableCORS    bool          `json:"enable_cors"`
-	TLS           TLSConfig     `json:"tls"`
+	Host         string        `json:"host"`
+	Port         int           `json:"port"`
+	ReadTimeout  time.Duration `json:"read_timeout"`
+	WriteTimeout time.Duration `json:"write_timeout"`
+	IdleTimeout  time.Duration `json:"idle_timeout"`
+	APIKey       string        `json:"api_key,omitempty"`
+	EnableCORS   bool          `json:"enable_cors"`
+	TLS          TLSConfig     `json:"tls"`
 }
 
 // TLSConfig holds TLS configuration
@@ -48,6 +48,7 @@ type DatabaseConfig struct {
 	Password        string        `json:"password,omitempty"`
 	Name            string        `json:"name"`
 	SSLMode         string        `json:"ssl_mode"`
+	Debug           bool          `json:"debug"`
 	MaxOpenConns    int           `json:"max_open_conns"`
 	MaxIdleConns    int           `json:"max_idle_conns"`
 	ConnMaxLifetime time.Duration `json:"conn_max_lifetime"`
@@ -128,6 +129,7 @@ func loadDatabaseConfig() DatabaseConfig {
 		Password:        os.Getenv("DB_PASSWORD"),
 		Name:            getEnvOrDefault("DB_NAME", "wazmeow"),
 		SSLMode:         getEnvOrDefault("DB_SSL_MODE", "disable"),
+		Debug:           getEnvAsBoolOrDefault("DB_DEBUG", false),
 		MaxOpenConns:    getEnvAsIntOrDefault("DB_MAX_OPEN_CONNS", 25),
 		MaxIdleConns:    getEnvAsIntOrDefault("DB_MAX_IDLE_CONNS", 5),
 		ConnMaxLifetime: getEnvAsDurationOrDefault("DB_CONN_MAX_LIFETIME", 5*time.Minute),
